@@ -1,0 +1,216 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>人生シミュレーター</title>
+<style>
+body{font-family:Arial,sans-serif;background:#101827;color:#fff;margin:0;padding:20px}
+main{max-width:800px;margin:auto}
+.card{background:#1e2b40;padding:18px;border-radius:14px;margin:14px 0}
+h1{color:#7ee7d4}
+button,select{padding:12px;margin:5px;border:0;border-radius:8px;cursor:pointer;font-size:16px}
+button{background:#397c91;color:white}
+button:hover{background:#4b9db0}
+.stat{display:inline-block;background:#101827;padding:12px;margin:5px;border-radius:8px;min-width:100px}
+#log p{border-bottom:1px solid #40516a;padding:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>人生シミュレーター</h1>
+<p>生まれてから人生の終わりまで。寿命は最後にわかる。</p>
+
+<div class="card" id="setup">
+<label>人生の舞台：</label>
+<select id="country">
+<option value="random">ランダム</option>
+<option value="日本">日本</option>
+<option value="北朝鮮">北朝鮮</option>
+</select>
+<button id="start">人生スタート</button>
+</div>
+
+<div id="game" hidden>
+<div class="card">
+<h2>現在の年齢：<span id="age">0</span>歳</h2>
+<p>場所：<span id="place"></span></p>
+<p>状況：<span id="status">幼少期</span></p>
+</div>
+
+<div class="card">
+<h2>ステータス</h2>
+<div id="stats"></div>
+</div>
+
+<div class="card">
+<h2 id="eventTitle">誕生</h2>
+<p id="eventText">人生が始まった。</p>
+<div id="choices"></div>
+</div>
+
+<div class="card">
+<h2>時間を進める</h2>
+<button id="one">1年進める</button>
+<button id="five">5年進める</button>
+<button id="ten">10年進める</button>
+<button id="auto">自動進行</button>
+<button id="stop" hidden>停止</button>
+</div>
+
+<div class="card">
+<h2>人生の記録</h2>
+<div id="log"></div>
+<button id="reset">別の人生を始める</button>
+</div>
+</div>
+
+<div class="card" id="ending" hidden>
+<h2>人生の終わり</h2>
+<p id="endingText"></p>
+<div id="finalStats"></div>
+<button id="again">もう一度遊ぶ</button>
+</div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let life=null,timer=null,waiting=false;
+
+function random(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function pick(a){return a[random(0,a.length-1)]}
+function clamp(n){return Math.max(0,Math.min(100,Math.round(n)))}
+
+function startGame(){
+ stopAuto();
+ let place=$("country").value;
+ if(place==="random")place=pick(["日本","北朝鮮","韓国","アメリカ"]);
+ life={age:0,place,health:random(65,95),happiness:random(45,75),education:random(20,45),money:random(15,35),friends:random(40,70),freedom:place==="北朝鮮"?20:75,alive:true,escaped:false,history:[]};
+ $("setup").hidden=true;$("ending").hidden=true;$("game").hidden=false;
+ log("誕生",place+"で人生が始まった。");
+ event("新しい人生","どんな人生になるかは、選択と偶然次第。");
+ render();
+}
+
+function log(title,text){
+ life.history.unshift({age:life.age,title,text});
+ if(life.history.length>60)life.history.pop();
+ renderLog();
+}
+
+function event(title,text,choices=[]){
+ $("eventTitle").textContent=title;
+ $("eventText").textContent=text;
+ $("choices").replaceChildren();
+ waiting=choices.length>0;
+ choices.forEach(c=>{
+  const b=document.createElement("button");
+  b.textContent=c.label;
+  b.onclick=()=>{c.run();waiting=false;$("choices").replaceChildren();render();};
+  $("choices").appendChild(b);
+ });
+ ["one","five","ten","auto"].forEach(id=>$(id).disabled=waiting);
+ log(title,text);
+}
+
+function specialEvent(){
+ const a=life.age;
+ if(a===6){
+  event("小学校へ","学校生活が始まった。どう過ごす？",[
+   {label:"勉強をがんばる",run:()=>{life.education+=12;life.happiness-=3;event("勉強","学力が伸びた。")}},
+   {label:"友達と過ごす",run:()=>{life.friends+=12;life.happiness+=7;event("友達","友達とのつながりが増えた。")}},
+   {label:"いろいろ挑戦する",run:()=>{life.education+=5;life.friends+=5;life.happiness+=4;event("挑戦","いろいろな経験を積んだ。")}}
+  ]);return true;
+ }
+ if(a===15){
+  event("進路選択","これからどうする？",[
+   {label:"進学する",run:()=>{life.education+=15;life.money-=5;event("進学","勉強を続けた。")}},
+   {label:"働き始める",run:()=>{life.money+=10;life.status="仕事を始めた";event("就職","働き始め、収入を得た。")}},
+   {label:"将来を探す",run:()=>{life.happiness+=5;life.friends+=3;event("進路探し","自分に合う道を考えた。")}}
+  ]);return true;
+ }
+ if(a===18&&life.place==="北朝鮮"&&!life.escaped){
+  event("将来への迷い","今後の人生について考えるようになった。",[
+   {label:"今の場所で暮らす",run:()=>{life.happiness+=3;event("日常","日々の生活を続けた。")}},
+   {label:"国外へ逃れる機会を探す",run:()=>{if(random(1,100)<=28){life.escaped=true;life.place="韓国";life.freedom=clamp(life.freedom+55);life.money=clamp(life.money-10);event("新しい国での生活","国外へ逃れ、新しい環境で暮らし始めた。仕事や生活習慣に慣れる必要がある。")}else{life.happiness-=5;event("計画は実現せず","計画は実現しなかった。今後について考え直すことにした。")}}}
+  ]);return true;
+ }
+ if(a===22){
+  event("人生の分かれ道","どんなことを大切にする？",[
+   {label:"仕事とお金",run:()=>{life.money+=15;life.education+=4;event("仕事","経験を積み、収入が増えた。")}},
+   {label:"人間関係",run:()=>{life.friends+=15;life.happiness+=8;event("人とのつながり","身近な人との関係が深まった。")}},
+   {label:"学び続ける",run:()=>{life.education+=12;life.happiness+=3;event("学び","新しい知識を身につけた。")}}
+  ]);return true;
+ }
+ return false;
+}
+
+function year(){
+ if(!life||!life.alive||waiting)return;
+ life.age++;
+ life.health=clamp(life.health+random(-4,2));
+ life.happiness=clamp(life.happiness+random(-3,3));
+ life.education=clamp(life.education+random(0,2));
+ life.money=clamp(life.money+random(-2,4));
+ life.friends=clamp(life.friends+random(-2,3));
+ if(life.place==="北朝鮮"&&!life.escaped)life.freedom=clamp(life.freedom-random(0,2));
+ if(life.age>=random(72,126)&&life.health<random(15,75)){endGame();return}
+ if(life.age>=126){endGame();return}
+ if(specialEvent()){render();return}
+ const events=[
+  ()=>{life.friends+=random(2,8);life.happiness+=random(1,5);return ["友人との出会い","気の合う人と知り合った。"]},
+  ()=>{life.money+=random(2,10);return ["小さな幸運","思いがけない収入があった。"]},
+  ()=>{life.health-=random(1,8);return ["体調不良","休息をとることにした。"]},
+  ()=>{life.education+=random(2,8);return ["学びの機会","新しいことを学んだ。"]},
+  ()=>{life.happiness-=random(2,8);return ["困難な一年","思いどおりにいかないこともあった。"]},
+  ()=>{life.health+=random(2,7);return ["休息と回復","休んで少し元気を取り戻した。"]},
+  ()=>{life.money-=random(2,8);return ["予想外の出費","必要な支出があった。"]}
+ ];
+ if(Math.random()<.72){const e=pick(events)();event(e[0],e[1])}
+ else event(life.age+"歳の一年","大きな出来事はなく、日々が過ぎていった。");
+ render();
+}
+
+function render(){
+ if(!life)return;
+ $("age").textContent=life.age;$("place").textContent=life.place;
+ $("status").textContent=life.escaped?"国外で新生活":life.age<6?"幼少期":life.age<15?"学生":life.age<22?"進路を考える時期":"人生を歩んでいる";
+ const stats=[["健康",life.health],["幸福",life.happiness],["学力",life.education],["お金",life.money],["人間関係",life.friends],["自由度",life.freedom]];
+ $("stats").replaceChildren();
+ stats.forEach(s=>{const d=document.createElement("div");d.className="stat";d.textContent=s[0]+": "+s[1]+"/100";$("stats").appendChild(d)});
+}
+
+function renderLog(){
+ if(!life)return;
+ $("log").replaceChildren();
+ life.history.slice(0,25).forEach(e=>{const p=document.createElement("p");p.textContent=e.age+"歳："+e.title+" — "+e.text;$("log").appendChild(p)});
+}
+
+function endGame(){
+ life.alive=false;stopAuto();
+ $("ending").hidden=false;
+ $("endingText").textContent=life.age+"歳で人生を終えた。寿命は"+life.age+"歳だった。"+(life.escaped?"国外で新しい人生を築いた経験も残った。":"");
+ $("finalStats").textContent="健康 "+life.health+" / 幸福 "+life.happiness+" / 学力 "+life.education+" / お金 "+life.money+" / 人間関係 "+life.friends;
+ log("人生の終わり",life.age+"歳で人生を終えた。");
+}
+function advance(n){for(let i=0;i<n&&life&&life.alive&&!waiting;i++){year();if(waiting||!life.alive)break}}
+function stopAuto(){if(timer){clearInterval(timer);timer=null}if($("stop"))$("stop").hidden=true}
+function autoRun(){
+ if(timer){stopAuto();return}
+ $("stop").hidden=false;
+ timer=setInterval(()=>{if(!life||!life.alive||waiting){stopAuto();return}year()},300);
+}
+function reset(){stopAuto();life=null;waiting=false;$("game").hidden=true;$("ending").hidden=true;$("setup").hidden=false}
+
+$("start").addEventListener("click",startGame);
+$("one").addEventListener("click",()=>advance(1));
+$("five").addEventListener("click",()=>advance(5));
+$("ten").addEventListener("click",()=>advance(10));
+$("auto").addEventListener("click",autoRun);
+$("stop").addEventListener("click",stopAuto);
+$("reset").addEventListener("click",reset);
+$("again").addEventListener("click",reset);
+</script>
+</body>
+</html>
